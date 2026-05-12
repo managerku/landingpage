@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Managerku Store</title>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#006C49",
+            primaryBright: "#10B981",
+            primarySoft: "#DCFCE7",
+            primaryDark: "#064E3B",
+            background: "#F8FAFC",
+            surfaceSoft: "#F0FDF4",
+            textMain: "#0F172A",
+            textMuted: "#64748B",
+            borderSoft: "#E5E7EB",
+            danger: "#DC2626",
+          },
+          fontFamily: {
+            body: ["Inter", "sans-serif"],
+            headline: ["Manrope", "sans-serif"],
+          },
+          boxShadow: {
+            soft: "0 12px 30px rgba(15, 23, 42, 0.08)",
+            green: "0 14px 35px rgba(0, 108, 73, 0.16)",
+          },
+          borderRadius: {
+            "3xl": "1.5rem",
+            "4xl": "2rem",
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    body {
+      min-height: 100dvh;
+      font-family: Inter, sans-serif;
+      background: #F8FAFC;
+      color: #0F172A;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root">
+    <div style="padding:32px;font-family:Inter,sans-serif;">Loading Managerku Store...</div>
+  </div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useState } = React;
+
+    /************************************
+     * CONFIG
+     ************************************/
+
+    const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbzYCIgarUlGAuyhndMuc4WOXHsCq_UBnoQhtCxtkXdP-pRYWnhcsq-U4nH8l2IxPCc/exec";
+
+    const STORE_URL = "./index.html";
+    const DASHBOARD_URL = "./dashboard.html";
+
+    const fallbackImage = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80";
+
+    const fallbackConfig = {
+      appName: "Managerku Store",
+      brandName: "Managerku Store",
+      whatsappNumber: "628123456789",
+      location: "Pontianak, Indonesia",
+      logoUrl: "",
+      heroImageUrl: fallbackImage,
+    };
+
+    /************************************
+     * API HELPER
+     ************************************/
+
+    async function apiCall(action, payload = {}, token = "") {
+      if (!APPS_SCRIPT_API_URL || APPS_SCRIPT_API_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
+        throw new Error("APPS_SCRIPT_API_URL is not configured. Paste your deployed Apps Script Web App URL first.");
+      }
+
+      const response = await fetch(APPS_SCRIPT_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action,
+          payload,
+          token,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || "API request failed.");
+      }
+
+      return result;
+    }
+
+    /************************************
+     * UTILITIES
+     ************************************/
+
+    function formatCurrency(value) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+      }).format(Number(value || 0));
+    }
+
+    function buildWhatsAppLink(number, message) {
+      const cleanNumber = String(number || "").replace(/\D/g, "");
+      return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message || "Halo, saya ingin bertanya tentang produk.")}`;
+    }
+
+    function Icon({ name, className = "" }) {
+      return <span className={`material-symbols-outlined ${className}`}>{name}</span>;
+    }
+
+    function LogoMark({ config, className = "w-10 h-10" }) {
+      const [imageFailed, setImageFailed] = useState(false);
+      const logoUrl = String(config.logoUrl || "").trim();
+
+      if (logoUrl && !imageFailed) {
+        return (
+          <div className={`${className} rounded-2xl bg-white border border-primarySoft flex items-center justify-center overflow-hidden shadow-green`}>
+            <img
+              src={logoUrl}
+              alt={config.brandName || "Logo"}
+              className="w-full h-full object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div className={`${className} rounded-2xl bg-primary text-white flex items-center justify-center shadow-green`}>
+          <Icon name="storefront" />
+        </div>
+      );
+    }
+
+    /************************************
+     * HEADER
+     ************************************/
+
+    function Header({ config }) {
+      const [secretClicks, setSecretClicks] = useState(0);
+
+      const waLink = buildWhatsAppLink(
+        config.whatsappNumber,
+        `Halo, saya ingin bertanya tentang produk di ${config.brandName}.`
+      );
+
+      function handleSecretBrandClick() {
+        const nextCount = secretClicks + 1;
+
+        if (nextCount >= 3) {
+          setSecretClicks(0);
+          window.location.href = DASHBOARD_URL;
+          return;
+        }
+
+        setSecretClicks(nextCount);
+
+        window.clearTimeout(window.__managerkuSecretTapTimer);
+        window.__managerkuSecretTapTimer = window.setTimeout(() => {
+          setSecretClicks(0);
+        }, 1500);
+      }
+
+      return (
+        <header className="sticky top-0 z-[100] bg-white/95 backdrop-blur border-b border-borderSoft shadow-sm">
+          <div className="h-16 max-w-7xl mx-auto px-4 md:px-10 flex items-center justify-between">
+            <button type="button" onClick={handleSecretBrandClick} className="flex items-center gap-3 text-left">
+              <LogoMark config={config} />
+
+              <div>
+                <p className="font-headline text-xl font-extrabold text-primary leading-none">
+                  {config.brandName}
+                </p>
+                <p className="text-[11px] text-textMuted hidden sm:block mt-1">
+                  Product catalog via WhatsApp
+                </p>
+              </div>
+            </button>
+
+            <nav className="hidden md:flex items-center gap-8">
+              <a href="#" className="text-sm font-bold text-primary">Store</a>
+              <a href="#products" className="text-sm font-bold text-textMuted hover:text-primary">Products</a>
+              <a href="#how-to-order" className="text-sm font-bold text-textMuted hover:text-primary">How to Order</a>
+            </nav>
+
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noreferrer"
+              className="h-10 px-4 rounded-full bg-primarySoft text-primary hover:bg-primary hover:text-white transition-all flex items-center gap-2 font-bold text-sm"
+            >
+              <Icon name="chat" className="text-[20px]" />
+              <span className="hidden sm:inline">Contact</span>
+            </a>
+          </div>
+        </header>
+      );
+    }
+
+    /************************************
+     * APP
+     ************************************/
+
+    function App() {
+      const [config, setConfig] = useState(fallbackConfig);
+      const [products, setProducts] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState("");
+      const [search, setSearch] = useState("");
+      const [category, setCategory] = useState("All");
+
+      useEffect(() => {
+        loadData();
+      }, []);
+
+      async function loadData() {
+        setLoading(true);
+        setError("");
+
+        try {
+          const [configResult, productsResult] = await Promise.all([
+            apiCall("getAppConfig"),
+            apiCall("getActiveProducts"),
+          ]);
+
+          setConfig(configResult.config || fallbackConfig);
+          setProducts(Array.isArray(productsResult.products) ? productsResult.products : []);
+        } catch (err) {
+          setError(err.message || String(err));
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      const categories = useMemo(() => {
+        const unique = [...new Set(products.map(product => product.category || "General"))];
+        return ["All", ...unique];
+      }, [products]);
+
+      const filteredProducts = useMemo(() => {
+        const keyword = search.toLowerCase().trim();
+
+        return products.filter(product => {
+          const matchesCategory = category === "All" || product.category === category;
+          const matchesSearch =
+            !keyword ||
+            String(product.name || "").toLowerCase().includes(keyword) ||
+            String(product.description || "").toLowerCase().includes(keyword) ||
+            String(product.category || "").toLowerCase().includes(keyword);
+
+          return matchesCategory && matchesSearch;
+        });
+      }, [products, search, category]);
+
+      const heroWaLink = buildWhatsAppLink(
+        config.whatsappNumber,
+        `Halo, saya ingin melihat katalog produk di ${config.brandName}.`
+      );
+
+      const heroImageUrl = String(config.heroImageUrl || fallbackImage).trim() || fallbackImage;
+
+      return (
+        <>
+          <Header config={config} />
+
+          <main>
+            <section className="relative overflow-hidden bg-white py-12 md:py-24">
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute -top-24 -right-24 w-72 h-72 bg-primarySoft rounded-full blur-3xl opacity-70"></div>
+                <div className="absolute bottom-0 left-0 w-80 h-80 bg-green-50 rounded-full blur-3xl opacity-80"></div>
+              </div>
+
+              <div className="relative max-w-7xl mx-auto px-4 md:px-10 grid md:grid-cols-2 items-center gap-12">
+                <div className="space-y-6 text-center md:text-left order-2 md:order-1">
+                  <div className="inline-flex items-center gap-2 bg-primarySoft text-primary px-4 py-2 rounded-full text-sm font-bold">
+                    <Icon name="verified" className="text-[18px]" />
+                    Managerku white-green product catalog
+                  </div>
+
+                  <h1 className="font-headline text-4xl md:text-6xl font-extrabold leading-tight">
+                    Find the Best <span className="text-primary">Products</span> for Your Needs
+                  </h1>
+
+                  <p className="text-lg text-textMuted max-w-xl mx-auto md:mx-0 leading-relaxed">
+                    Browse products, check availability, and order directly through WhatsApp.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                    <a
+                      href={heroWaLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-primary text-white h-12 px-8 rounded-full flex items-center justify-center gap-2 shadow-green hover:bg-primaryDark active:scale-95 transition-all font-bold"
+                    >
+                      <Icon name="shopping_cart" />
+                      Shop via WhatsApp
+                    </a>
+
+                    <a
+                      href="#products"
+                      className="bg-surfaceSoft text-primary h-12 px-8 rounded-full flex items-center justify-center hover:bg-primarySoft active:scale-95 transition-all font-bold"
+                    >
+                      View Products
+                    </a>
+                  </div>
+                </div>
+
+                <div className="order-1 md:order-2">
+                  <div className="relative w-full aspect-square md:aspect-auto md:h-[500px] rounded-4xl overflow-hidden shadow-green bg-surfaceSoft">
+                    <img
+                      alt="Product catalog"
+                      className="w-full h-full object-cover"
+                      src={heroImageUrl}
+                      onError={event => {
+                        event.currentTarget.src = fallbackImage;
+                      }}
+                    />
+
+                    <div className="absolute bottom-5 left-5 right-5 bg-white/90 backdrop-blur rounded-3xl p-5 border border-white/70 shadow-soft">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center">
+                          <Icon name="bolt" />
+                        </div>
+
+                        <div>
+                          <p className="font-extrabold">Fast WhatsApp Order</p>
+                          <p className="text-sm text-textMuted">Customer clicks, chat opens instantly.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="products" className="py-14 md:py-20 bg-background">
+              <div className="max-w-7xl mx-auto px-4 md:px-10 space-y-8">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h2 className="font-headline text-3xl font-extrabold">Our Products</h2>
+                      <p className="text-textMuted mt-2">Search, filter, and order directly through WhatsApp.</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map(item => (
+                        <button
+                          key={item}
+                          onClick={() => setCategory(item)}
+                          className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                            category === item
+                              ? "bg-primary text-white shadow-green"
+                              : "bg-white text-textMuted border border-borderSoft hover:text-primary hover:bg-primarySoft"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="relative w-full md:w-96">
+                    <input
+                      value={search}
+                      onChange={event => setSearch(event.target.value)}
+                      className="w-full h-12 pl-4 pr-4 rounded-2xl border border-borderSoft bg-white focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      placeholder="Search products..."
+                      type="text"
+                    />
+                  </div>
+                </div>
+
+                {error ? (
+                  <ErrorBox message={error} onRetry={loadData} />
+                ) : loading ? (
+                  <ProductSkeletonGrid />
+                ) : filteredProducts.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {filteredProducts.map(product => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        whatsappNumber={config.whatsappNumber}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon="inventory_2"
+                    title="No products found"
+                    text="Try another keyword or category."
+                  />
+                )}
+              </div>
+            </section>
+
+            <section id="how-to-order" className="py-20 md:py-24 bg-white">
+              <div className="max-w-7xl mx-auto px-4 md:px-10">
+                <div className="text-center space-y-4 mb-16">
+                  <h2 className="font-headline text-3xl md:text-4xl font-extrabold">3 Simple Steps to Order</h2>
+                  <p className="text-lg text-textMuted max-w-2xl mx-auto">
+                    Customers do not need an account. They only choose, click, and confirm through WhatsApp.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <StepCard number="1" title="Choose" text="Browse the catalog and pick the product." />
+                  <StepCard number="2" title="Click" text="Tap the WhatsApp button on the selected product." />
+                  <StepCard number="3" title="Confirm" text="Admin confirms availability, payment, and delivery." />
+                </div>
+              </div>
+            </section>
+
+            <Footer config={config} />
+          </main>
+        </>
+      );
+    }
+
+    /************************************
+     * COMPONENTS
+     ************************************/
+
+    function ProductCard({ product, whatsappNumber }) {
+      const message = product.waMessage || `Halo, saya tertarik dengan produk ${product.name}. Apakah masih tersedia?`;
+      const waLink = buildWhatsAppLink(whatsappNumber, message);
+      const isOut = product.stockStatus === "Out of Stock";
+
+      return (
+        <div className="group bg-white rounded-3xl overflow-hidden border border-borderSoft shadow-sm hover:shadow-soft transition-all duration-300">
+          <div className="relative aspect-square overflow-hidden bg-surfaceSoft">
+            <img
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              src={product.imageUrl || fallbackImage}
+              onError={event => {
+                event.currentTarget.src = fallbackImage;
+              }}
+            />
+
+            <span className="absolute top-3 left-3 bg-primarySoft text-primary px-3 py-1 rounded-full text-xs font-extrabold">
+              {product.category || "General"}
+            </span>
+
+            <span className={`absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1 ${
+              isOut ? "text-danger" : "text-primary"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isOut ? "bg-danger" : "bg-primary"}`}></span>
+              {product.stockStatus || "In Stock"}
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div>
+              <h4 className="font-extrabold text-lg line-clamp-2">{product.name}</h4>
+              <p className="text-sm text-textMuted line-clamp-2 mt-1">{product.description}</p>
+              <p className="font-headline text-primary font-extrabold text-xl mt-3">
+                {formatCurrency(product.price)}
+              </p>
+            </div>
+
+            <a
+              href={isOut ? undefined : waLink}
+              target="_blank"
+              rel="noreferrer"
+              className={`w-full h-11 rounded-2xl flex items-center justify-center gap-2 font-extrabold text-sm transition-all ${
+                isOut
+                  ? "bg-slate-100 text-textMuted cursor-not-allowed"
+                  : "bg-primary text-white hover:bg-primaryDark active:scale-95"
+              }`}
+              onClick={event => {
+                if (isOut) event.preventDefault();
+              }}
+            >
+              <Icon name="chat" className="text-[18px]" />
+              {isOut ? "Out of Stock" : "Order via WhatsApp"}
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    function StepCard({ number, title, text }) {
+      return (
+        <div className="flex flex-col items-center text-center space-y-5 bg-white border border-borderSoft rounded-4xl p-8 shadow-sm">
+          <div className="w-20 h-20 rounded-full bg-primary text-white flex items-center justify-center font-headline text-3xl font-extrabold shadow-green">
+            {number}
+          </div>
+          <div>
+            <h3 className="font-headline text-2xl font-extrabold">{title}</h3>
+            <p className="text-textMuted mt-2">{text}</p>
+          </div>
+        </div>
+      );
+    }
+
+    function EmptyState({ icon, title, text }) {
+      return (
+        <div className="bg-white rounded-3xl border border-dashed border-borderSoft p-10 text-center">
+          <div className="w-16 h-16 mx-auto rounded-full bg-primarySoft text-primary flex items-center justify-center mb-4">
+            <Icon name={icon} />
+          </div>
+          <h3 className="font-headline text-xl font-extrabold">{title}</h3>
+          <p className="text-textMuted mt-2">{text}</p>
+        </div>
+      );
+    }
+
+    function ErrorBox({ message, onRetry }) {
+      return (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-3xl p-6">
+          <p className="font-extrabold">Failed to connect to backend.</p>
+          <p className="text-sm mt-2 break-words">{message}</p>
+          <button onClick={onRetry} className="mt-4 h-10 px-4 rounded-full bg-red-600 text-white font-bold">
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    function ProductSkeletonGrid() {
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(item => (
+            <div key={item} className="bg-white rounded-3xl border border-borderSoft overflow-hidden animate-pulse">
+              <div className="aspect-square bg-slate-100"></div>
+              <div className="p-5 space-y-3">
+                <div className="h-5 bg-slate-100 rounded"></div>
+                <div className="h-4 bg-slate-100 rounded w-2/3"></div>
+                <div className="h-10 bg-slate-100 rounded-2xl"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function Footer({ config }) {
+      return (
+        <footer className="bg-surfaceSoft border-t border-borderSoft">
+          <div className="max-w-7xl mx-auto px-4 md:px-10 py-10 flex flex-col md:flex-row justify-between gap-8">
+            <div className="max-w-sm">
+              <div className="flex items-center gap-3">
+                <LogoMark config={config} className="w-11 h-11" />
+                <p className="font-headline text-2xl font-extrabold text-primary">{config.brandName}</p>
+              </div>
+              <p className="text-textMuted mt-3">
+                Clean product catalog and WhatsApp ordering system powered by Google Apps Script.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-extrabold uppercase tracking-wide text-sm">Contact</p>
+              <div className="mt-3 space-y-2 text-textMuted">
+                <p>{config.whatsappNumber}</p>
+                <p>{config.location}</p>
+              </div>
+            </div>
+          </div>
+        </footer>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
