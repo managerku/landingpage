@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Managerku Store Dashboard</title>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#006C49",
+            primarySoft: "#DCFCE7",
+            primaryDark: "#064E3B",
+            background: "#F8FAFC",
+            surfaceSoft: "#F0FDF4",
+            textMain: "#0F172A",
+            textMuted: "#64748B",
+            borderSoft: "#E5E7EB",
+            danger: "#DC2626",
+            warning: "#F59E0B",
+          },
+          fontFamily: {
+            body: ["Inter", "sans-serif"],
+            headline: ["Manrope", "sans-serif"],
+          },
+          boxShadow: {
+            soft: "0 12px 30px rgba(15, 23, 42, 0.08)",
+            green: "0 14px 35px rgba(0, 108, 73, 0.16)",
+          },
+          borderRadius: {
+            "3xl": "1.5rem",
+            "4xl": "2rem",
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    body {
+      min-height: 100dvh;
+      font-family: Inter, sans-serif;
+      background: #F8FAFC;
+      color: #0F172A;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .input-field {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 1rem;
+      border: 1px solid #E5E7EB;
+      background: #F8FAFC;
+      padding: 0.65rem 0.9rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:focus {
+      border-color: #006C49;
+      box-shadow: 0 0 0 1px #006C49;
+      background: #FFFFFF;
+    }
+
+    .line-clamp-1 {
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root">
+    <div style="padding:32px;font-family:Inter,sans-serif;">Loading Dashboard...</div>
+  </div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useState } = React;
+
+    /************************************
+     * CONFIG
+     ************************************/
+
+    const APPS_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbzYCIgarUlGAuyhndMuc4WOXHsCq_UBnoQhtCxtkXdP-pRYWnhcsq-U4nH8l2IxPCc/exec";
+
+    const STORE_URL = "./index.html";
+
+    const fallbackImage = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80";
+
+    const fallbackConfig = {
+      appName: "Managerku Store",
+      brandName: "Managerku Store",
+      whatsappNumber: "628123456789",
+      location: "Pontianak, Indonesia",
+      logoUrl: "",
+      heroImageUrl: fallbackImage,
+    };
+
+    const emptyProductForm = {
+      id: "",
+      name: "",
+      description: "",
+      price: "",
+      category: "General",
+      stockStatus: "In Stock",
+      imageUrl: "",
+      active: true,
+      waMessage: "",
+      createdAt: "",
+      updatedAt: "",
+    };
+
+    /************************************
+     * API HELPER
+     ************************************/
+
+    async function apiCall(action, payload = {}, token = "") {
+      if (!APPS_SCRIPT_API_URL || APPS_SCRIPT_API_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
+        throw new Error("APPS_SCRIPT_API_URL is not configured. Paste your deployed Apps Script Web App URL first.");
+      }
+
+      const response = await fetch(APPS_SCRIPT_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action,
+          payload,
+          token,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || "API request failed.");
+      }
+
+      return result;
+    }
+
+    function getStoredAdminToken() {
+      return sessionStorage.getItem("managerku_admin_token") || "";
+    }
+
+    function setStoredAdminSession(username, token) {
+      sessionStorage.setItem("managerku_admin_auth", "true");
+      sessionStorage.setItem("managerku_admin_username", username || "");
+      sessionStorage.setItem("managerku_admin_token", token || "");
+    }
+
+    function clearStoredAdminSession() {
+      sessionStorage.removeItem("managerku_admin_auth");
+      sessionStorage.removeItem("managerku_admin_username");
+      sessionStorage.removeItem("managerku_admin_token");
+    }
+
+    /************************************
+     * UTILITIES
+     ************************************/
+
+    function goToStore() {
+      window.location.href = STORE_URL;
+    }
+
+    function formatCurrency(value) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+      }).format(Number(value || 0));
+    }
+
+    function Icon({ name, className = "" }) {
+      return <span className={`material-symbols-outlined ${className}`}>{name}</span>;
+    }
+
+    function LogoMark({ config, className = "w-10 h-10" }) {
+      const [imageFailed, setImageFailed] = useState(false);
+      const logoUrl = String(config.logoUrl || "").trim();
+
+      if (logoUrl && !imageFailed) {
+        return (
+          <div className={`${className} rounded-2xl bg-white border border-primarySoft flex items-center justify-center overflow-hidden shadow-green`}>
+            <img
+              src={logoUrl}
+              alt={config.brandName || "Logo"}
+              className="w-full h-full object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div className={`${className} rounded-2xl bg-primary text-white flex items-center justify-center shadow-green`}>
+          <Icon name="storefront" />
+        </div>
+      );
+    }
+
+    function readImageFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error("Please choose an image file first."));
+          return;
+        }
+
+        if (!String(file.type || "").startsWith("image/")) {
+          reject(new Error("Only image files are allowed."));
+          return;
+        }
+
+        const maxSize = 6 * 1024 * 1024;
+
+        if (file.size > maxSize) {
+          reject(new Error("Image is too large. Please upload an image below 6 MB."));
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || "image/png",
+            size: file.size,
+            dataUrl: reader.result,
+          });
+        };
+
+        reader.onerror = () => {
+          reject(new Error("Failed to read selected image."));
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /************************************
+     * APP
+     ************************************/
+
+    function App() {
+      const [config, setConfig] = useState(fallbackConfig);
+      const [products, setProducts] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+      const [toast, setToast] = useState(null);
+
+      const [isAuthenticated, setIsAuthenticated] = useState(
+        sessionStorage.getItem("managerku_admin_auth") === "true" && Boolean(getStoredAdminToken())
+      );
+
+      const [adminUsername, setAdminUsername] = useState(
+        sessionStorage.getItem("managerku_admin_username") || ""
+      );
+
+      const [adminToken, setAdminToken] = useState(getStoredAdminToken());
+
+      useEffect(() => {
+        checkConnectionAndLoad();
+      }, []);
+
+      function showToast(type, title, message) {
+        setToast({ type, title, message });
+
+        setTimeout(() => {
+          setToast(null);
+        }, 4200);
+      }
+
+      function handleSessionExpired(message) {
+        clearStoredAdminSession();
+        setIsAuthenticated(false);
+        setAdminUsername("");
+        setAdminToken("");
+        setProducts([]);
+        showToast("error", "Session ended", message || "Please login again.");
+      }
+
+      async function checkConnectionAndLoad() {
+        setLoading(true);
+        setError("");
+
+        try {
+          await apiCall("pingServer");
+
+          const configResult = await apiCall("getAppConfig");
+          setConfig(configResult.config || fallbackConfig);
+
+          const storedToken = getStoredAdminToken();
+
+          if (isAuthenticated && storedToken) {
+            const productResult = await apiCall("getProducts", {}, storedToken);
+            setProducts(Array.isArray(productResult.products) ? productResult.products : []);
+          }
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function loadProducts() {
+        setLoading(true);
+        setError("");
+
+        try {
+          const productResult = await apiCall("getProducts", {}, adminToken);
+          setProducts(Array.isArray(productResult.products) ? productResult.products : []);
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleAdminLogin(username, password) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("loginAdmin", {
+            username,
+            password,
+          });
+
+          if (!result.token) {
+            showToast("error", "Login failed", "Backend did not return admin token.");
+            return false;
+          }
+
+          setStoredAdminSession(result.username || username, result.token);
+
+          setIsAuthenticated(true);
+          setAdminUsername(result.username || username);
+          setAdminToken(result.token);
+
+          const [configResult, productResult] = await Promise.all([
+            apiCall("getAppConfig"),
+            apiCall("getProducts", {}, result.token),
+          ]);
+
+          setConfig(configResult.config || fallbackConfig);
+          setProducts(Array.isArray(productResult.products) ? productResult.products : []);
+
+          showToast("success", "Welcome", result.message || "Login successful.");
+          return true;
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Login failed", message);
+          return false;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleAdminLogout() {
+        const token = adminToken || getStoredAdminToken();
+
+        try {
+          if (token) {
+            await apiCall("logoutAdmin", {}, token);
+          }
+        } catch (err) {
+          // Continue logout locally even if backend logout fails.
+        }
+
+        clearStoredAdminSession();
+
+        setIsAuthenticated(false);
+        setAdminUsername("");
+        setAdminToken("");
+        setProducts([]);
+
+        showToast("success", "Logged out", "Dashboard session has ended.");
+      }
+
+      async function handleSaveProduct(payload) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("saveProduct", payload, adminToken);
+          setProducts(result.products || []);
+          showToast("success", "Saved", result.message || "Product saved successfully.");
+          return result;
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Save failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+
+          throw err;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleDeleteProduct(productId) {
+        const confirmed = window.confirm("Delete this product? This cannot be undone.");
+        if (!confirmed) return;
+
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("deleteProduct", { productId }, adminToken);
+          setProducts(result.products || []);
+          showToast("success", "Deleted", result.message || "Product deleted successfully.");
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Delete failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleToggleProduct(productId) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("toggleProductActive", { productId }, adminToken);
+          setProducts(result.products || []);
+          showToast("success", "Updated", result.message || "Product visibility updated.");
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Update failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleSeedProducts() {
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("seedSampleProducts", {}, adminToken);
+          setProducts(result.products || []);
+
+          showToast(
+            result.success ? "success" : "error",
+            result.success ? "Sample added" : "Skipped",
+            result.message || ""
+          );
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Seed failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleLogoUpload(file) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const imagePayload = await readImageFileAsDataUrl(file);
+          const result = await apiCall("uploadLogoToDrive", {
+            ...imagePayload,
+            uploadType: "logo",
+          }, adminToken);
+
+          if (result && result.config) {
+            setConfig(result.config);
+          }
+
+          showToast("success", "Logo uploaded", result.message || "Logo updated successfully.");
+          return result;
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Logo upload failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+
+          throw err;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleHeroImageUpload(file) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const imagePayload = await readImageFileAsDataUrl(file);
+          const result = await apiCall("uploadHeroImageToDrive", {
+            ...imagePayload,
+            uploadType: "hero",
+          }, adminToken);
+
+          if (result && result.config) {
+            setConfig(result.config);
+          }
+
+          showToast("success", "Hero image uploaded", result.message || "Hero image updated successfully.");
+          return result;
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Hero image upload failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+
+          throw err;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handleProductImageUpload(imagePayload) {
+        const result = await apiCall("uploadProductImageToDrive", {
+          ...imagePayload,
+          uploadType: "product",
+        }, adminToken);
+
+        return result;
+      }
+
+      async function handleSaveSetting(key, value) {
+        setLoading(true);
+        setError("");
+
+        try {
+          const result = await apiCall("saveSetting", { key, value }, adminToken);
+
+          if (result && result.config) {
+            setConfig(result.config);
+          }
+
+          showToast("success", "Settings saved", result.message || "Setting saved successfully.");
+          return result;
+        } catch (err) {
+          const message = err.message || String(err);
+          setError(message);
+          showToast("error", "Setting failed", message);
+
+          if (message.toLowerCase().includes("session") || message.toLowerCase().includes("token")) {
+            handleSessionExpired(message);
+          }
+
+          throw err;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      return (
+        <>
+          <Toast toast={toast} onClose={() => setToast(null)} />
+
+          {error && (
+            <div className="fixed bottom-4 left-4 right-4 md:left-auto md:w-[460px] z-[1000]">
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-3xl p-5 shadow-soft">
+                <p className="font-extrabold">Backend connection issue</p>
+                <p className="text-sm mt-2 break-words">{error}</p>
+                <button
+                  onClick={checkConnectionAndLoad}
+                  className="mt-4 h-10 px-4 rounded-full bg-red-600 text-white font-bold"
+                >
+                  Retry connection
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isAuthenticated ? (
+            <DashboardPage
+              config={config}
+              products={products}
+              loading={loading}
+              adminUsername={adminUsername}
+              onLogout={handleAdminLogout}
+              onRefresh={loadProducts}
+              onSaveProduct={handleSaveProduct}
+              onDeleteProduct={handleDeleteProduct}
+              onToggleProduct={handleToggleProduct}
+              onSeedProducts={handleSeedProducts}
+              onLogoUpload={handleLogoUpload}
+              onHeroImageUpload={handleHeroImageUpload}
+              onProductImageUpload={handleProductImageUpload}
+              onSaveSetting={handleSaveSetting}
+              showToast={showToast}
+            />
+          ) : (
+            <LoginPage
+              loading={loading}
+              onLogin={handleAdminLogin}
+            />
+          )}
+        </>
+      );
+    }
+
+    /************************************
+     * COMPONENTS
+     ************************************/
+
+    function Toast({ toast, onClose }) {
+      if (!toast) return null;
+
+      const isError = toast.type === "error";
+
+      return (
+        <div className="fixed top-20 right-4 z-[999] max-w-sm">
+          <div className={`rounded-2xl px-5 py-4 shadow-soft border bg-white ${isError ? "border-red-200" : "border-green-200"}`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isError ? "bg-red-100 text-red-600" : "bg-primarySoft text-primary"}`}>
+                <Icon name={isError ? "error" : "check_circle"} />
+              </div>
+
+              <div className="flex-1">
+                <p className="font-bold text-sm">{toast.title}</p>
+                <p className="text-sm text-textMuted mt-0.5">{toast.message}</p>
+              </div>
+
+              <button onClick={onClose} className="text-textMuted hover:text-textMain">
+                <Icon name="close" className="text-[18px]" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function LoginPage({ loading, onLogin }) {
+      const [username, setUsername] = useState("");
+      const [password, setPassword] = useState("");
+      const [showPassword, setShowPassword] = useState(false);
+
+      async function submitLogin(event) {
+        event.preventDefault();
+        await onLogin(username, password);
+      }
+
+      return (
+        <main className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md">
+            <div className="bg-white rounded-4xl border border-borderSoft shadow-soft p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 mx-auto rounded-3xl bg-primary text-white flex items-center justify-center shadow-green mb-4">
+                  <Icon name="lock" className="text-[32px]" />
+                </div>
+
+                <h1 className="font-headline text-3xl font-extrabold">
+                  Owner Access
+                </h1>
+
+                <p className="text-textMuted mt-2">
+                  Restricted dashboard. Please authenticate to continue.
+                </p>
+              </div>
+
+              <form onSubmit={submitLogin} className="space-y-4">
+                <Field label="Username" required>
+                  <input
+                    value={username}
+                    onChange={event => setUsername(event.target.value)}
+                    required
+                    className="input-field"
+                    placeholder="Username"
+                    autoComplete="username"
+                  />
+                </Field>
+
+                <Field label="Password" required>
+                  <div className="relative">
+                    <input
+                      value={password}
+                      onChange={event => setPassword(event.target.value)}
+                      required
+                      type={showPassword ? "text" : "password"}
+                      className="input-field pr-11"
+                      placeholder="Password"
+                      autoComplete="current-password"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(prev => !prev)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-textMuted hover:text-primary"
+                    >
+                      <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
+                    </button>
+                  </div>
+                </Field>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-12 rounded-2xl bg-primary text-white font-extrabold hover:bg-primaryDark active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Icon name="login" />
+                  {loading ? "Checking..." : "Continue"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goToStore}
+                  className="w-full h-12 rounded-2xl bg-surfaceSoft text-primary font-extrabold hover:bg-primarySoft active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Icon name="arrow_back" />
+                  Back to Store
+                </button>
+              </form>
+            </div>
+          </div>
+        </main>
+      );
+    }
+
+    function DashboardPage({
+      config,
+      products,
+      loading,
+      adminUsername,
+      onLogout,
+      onRefresh,
+      onSaveProduct,
+      onDeleteProduct,
+      onToggleProduct,
+      onSeedProducts,
+      onLogoUpload,
+      onHeroImageUpload,
+      onProductImageUpload,
+      onSaveSetting,
+      showToast,
+    }) {
+      const [activeMenu, setActiveMenu] = useState("products");
+
+      return (
+        <main className="bg-background min-h-screen">
+          <header className="sticky top-0 z-[100] bg-white/95 backdrop-blur border-b border-borderSoft shadow-sm">
+            <div className="h-16 max-w-7xl mx-auto px-4 md:px-10 flex items-center justify-between">
+              <button onClick={goToStore} className="flex items-center gap-3 text-left">
+                <LogoMark config={config} />
+
+                <div>
+                  <p className="font-headline text-xl font-extrabold text-primary leading-none">
+                    {config.brandName}
+                  </p>
+                  <p className="text-[11px] text-textMuted hidden sm:block mt-1">
+                    Owner dashboard
+                  </p>
+                </div>
+              </button>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={goToStore}
+                  className="h-10 px-4 rounded-full bg-surfaceSoft text-primary hover:bg-primarySoft font-bold text-sm flex items-center gap-2"
+                >
+                  <Icon name="storefront" className="text-[18px]" />
+                  <span className="hidden sm:inline">Store</span>
+                </button>
+
+                <button
+                  onClick={onLogout}
+                  className="h-10 px-4 rounded-full bg-red-50 text-red-600 hover:bg-red-100 font-bold text-sm flex items-center gap-2"
+                >
+                  <Icon name="logout" className="text-[18px]" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 md:px-10 pb-3 flex gap-2 overflow-x-auto">
+              <MenuButton
+                active={activeMenu === "products"}
+                icon="inventory_2"
+                label="Products"
+                onClick={() => setActiveMenu("products")}
+              />
+              <MenuButton
+                active={activeMenu === "settings"}
+                icon="settings"
+                label="Settings"
+                onClick={() => setActiveMenu("settings")}
+              />
+            </div>
+          </header>
+
+          {activeMenu === "settings" ? (
+            <SettingsPanel
+              config={config}
+              loading={loading}
+              adminUsername={adminUsername}
+              onLogoUpload={onLogoUpload}
+              onHeroImageUpload={onHeroImageUpload}
+              onSaveSetting={onSaveSetting}
+            />
+          ) : (
+            <ProductsPanel
+              products={products}
+              loading={loading}
+              adminUsername={adminUsername}
+              onRefresh={onRefresh}
+              onSaveProduct={onSaveProduct}
+              onDeleteProduct={onDeleteProduct}
+              onToggleProduct={onToggleProduct}
+              onSeedProducts={onSeedProducts}
+              onProductImageUpload={onProductImageUpload}
+              showToast={showToast}
+            />
+          )}
+        </main>
+      );
+    }
+
+    function MenuButton({ active, icon, label, onClick }) {
+      return (
+        <button
+          onClick={onClick}
+          className={`h-10 px-4 rounded-full font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-all ${
+            active
+              ? "bg-primary text-white shadow-green"
+              : "bg-surfaceSoft text-textMuted hover:bg-primarySoft hover:text-primary"
+          }`}
+        >
+          <Icon name={icon} className="text-[18px]" />
+          {label}
+        </button>
+      );
+    }
+
+    function ProductsPanel({
+      products,
+      loading,
+      adminUsername,
+      onRefresh,
+      onSaveProduct,
+      onDeleteProduct,
+      onToggleProduct,
+      onSeedProducts,
+      onProductImageUpload,
+      showToast,
+    }) {
+      const [form, setForm] = useState(emptyProductForm);
+      const [search, setSearch] = useState("");
+      const [uploadingProductImage, setUploadingProductImage] = useState(false);
+
+      const summary = useMemo(() => {
+        return {
+          total: products.length,
+          active: products.filter(product => product.active).length,
+          outOfStock: products.filter(product => product.stockStatus === "Out of Stock").length,
+          categories: new Set(products.map(product => product.category || "General")).size,
+        };
+      }, [products]);
+
+      const filteredProducts = useMemo(() => {
+        const keyword = search.toLowerCase().trim();
+
+        if (!keyword) return products;
+
+        return products.filter(product => {
+          return (
+            String(product.name || "").toLowerCase().includes(keyword) ||
+            String(product.category || "").toLowerCase().includes(keyword) ||
+            String(product.stockStatus || "").toLowerCase().includes(keyword)
+          );
+        });
+      }, [products, search]);
+
+      function updateForm(field, value) {
+        setForm(prev => ({
+          ...prev,
+          [field]: value,
+        }));
+      }
+
+      function resetForm() {
+        setForm(emptyProductForm);
+      }
+
+      function editProduct(product) {
+        setForm({
+          ...product,
+          price: product.price || "",
+        });
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      async function submitForm(event) {
+        event.preventDefault();
+
+        const payload = {
+          ...form,
+          price: Number(form.price || 0),
+        };
+
+        await onSaveProduct(payload);
+        resetForm();
+      }
+
+      async function handleProductImageChange(event) {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = "";
+
+        if (!file) return;
+
+        setUploadingProductImage(true);
+
+        try {
+          const imagePayload = await readImageFileAsDataUrl(file);
+          const result = await onProductImageUpload(imagePayload);
+
+          updateForm("imageUrl", result.imageUrl || (result.upload && result.upload.thumbnailUrl) || "");
+          showToast("success", "Image uploaded", result.message || "Product image uploaded successfully.");
+        } catch (err) {
+          showToast("error", "Image upload failed", err.message || String(err));
+        } finally {
+          setUploadingProductImage(false);
+        }
+      }
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 md:px-10 py-8 md:py-12 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-primarySoft text-primary px-4 py-2 rounded-full text-sm font-bold mb-4">
+                <Icon name="admin_panel_settings" className="text-[18px]" />
+                Product Dashboard
+              </div>
+
+              <h1 className="font-headline text-3xl md:text-5xl font-extrabold">
+                Track and Manage Products
+              </h1>
+
+              <p className="text-textMuted mt-2">
+                Add, edit, hide, show, and delete products from one clean dashboard.
+              </p>
+
+              <p className="text-sm text-primary font-bold mt-2">
+                Logged in as: {adminUsername}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={onRefresh}
+                className="h-11 px-5 rounded-full bg-white border border-borderSoft text-textMain font-bold hover:bg-surfaceSoft flex items-center gap-2"
+              >
+                <Icon name="refresh" className="text-[18px]" />
+                Refresh
+              </button>
+
+              <button
+                onClick={onSeedProducts}
+                className="h-11 px-5 rounded-full bg-primary text-white font-bold hover:bg-primaryDark flex items-center gap-2"
+              >
+                <Icon name="add_circle" className="text-[18px]" />
+                Seed Sample
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <SummaryCard icon="inventory_2" label="Total Products" value={summary.total} />
+            <SummaryCard icon="visibility" label="Active Products" value={summary.active} />
+            <SummaryCard icon="remove_shopping_cart" label="Out of Stock" value={summary.outOfStock} />
+            <SummaryCard icon="category" label="Categories" value={summary.categories} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section className="lg:col-span-1 bg-white rounded-4xl border border-borderSoft shadow-sm p-6">
+              <div className="flex items-center justify-between gap-3 mb-6">
+                <div>
+                  <h2 className="font-headline text-2xl font-extrabold">
+                    {form.id ? "Edit Product" : "Add Product"}
+                  </h2>
+                  <p className="text-sm text-textMuted">Data will be saved to Google Sheets.</p>
+                </div>
+
+                {form.id && (
+                  <button
+                    onClick={resetForm}
+                    className="h-9 px-3 rounded-full bg-surfaceSoft text-textMuted hover:text-primary font-bold text-sm"
+                  >
+                    New
+                  </button>
+                )}
+              </div>
+
+              <form onSubmit={submitForm} className="space-y-4">
+                <Field label="Product Name" required>
+                  <input
+                    value={form.name}
+                    onChange={event => updateForm("name", event.target.value)}
+                    required
+                    className="input-field"
+                    placeholder="Example: Premium Organic Spinach"
+                  />
+                </Field>
+
+                <Field label="Description">
+                  <textarea
+                    value={form.description}
+                    onChange={event => updateForm("description", event.target.value)}
+                    className="input-field min-h-[96px]"
+                    placeholder="Short product description"
+                  />
+                </Field>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Price">
+                    <input
+                      value={form.price}
+                      onChange={event => updateForm("price", event.target.value)}
+                      type="number"
+                      className="input-field"
+                      placeholder="15000"
+                    />
+                  </Field>
+
+                  <Field label="Category">
+                    <input
+                      value={form.category}
+                      onChange={event => updateForm("category", event.target.value)}
+                      className="input-field"
+                      placeholder="Fresh"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Stock Status">
+                    <select
+                      value={form.stockStatus}
+                      onChange={event => updateForm("stockStatus", event.target.value)}
+                      className="input-field"
+                    >
+                      <option>In Stock</option>
+                      <option>Low Stock</option>
+                      <option>Out of Stock</option>
+                    </select>
+                  </Field>
+
+                  <Field label="Visibility">
+                    <select
+                      value={form.active ? "true" : "false"}
+                      onChange={event => updateForm("active", event.target.value === "true")}
+                      className="input-field"
+                    >
+                      <option value="true">Visible</option>
+                      <option value="false">Hidden</option>
+                    </select>
+                  </Field>
+                </div>
+
+                <Field label="Product Photo">
+                  <div className="space-y-3">
+                    {form.imageUrl ? (
+                      <div className="relative aspect-video rounded-3xl overflow-hidden bg-surfaceSoft border border-borderSoft">
+                        <img
+                          src={form.imageUrl}
+                          alt="Product preview"
+                          className="w-full h-full object-cover"
+                          onError={event => {
+                            event.currentTarget.src = fallbackImage;
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="aspect-video rounded-3xl bg-surfaceSoft border border-dashed border-borderSoft flex flex-col items-center justify-center text-center p-5">
+                        <Icon name="image" className="text-primary text-[34px]" />
+                        <p className="font-bold text-sm mt-2">No product photo yet</p>
+                        <p className="text-xs text-textMuted mt-1">Upload an image or paste an image URL below.</p>
+                      </div>
+                    )}
+
+                    <label className="h-11 px-4 rounded-2xl bg-primarySoft text-primary hover:bg-primary hover:text-white transition-all font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                      <Icon name="upload" className="text-[18px]" />
+                      {uploadingProductImage ? "Uploading..." : "Upload Product Photo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingProductImage}
+                        onChange={handleProductImageChange}
+                      />
+                    </label>
+                  </div>
+                </Field>
+
+                <Field label="Image URL">
+                  <input
+                    value={form.imageUrl}
+                    onChange={event => updateForm("imageUrl", event.target.value)}
+                    className="input-field"
+                    placeholder="https://..."
+                  />
+                </Field>
+
+                <Field label="WhatsApp Message Template">
+                  <textarea
+                    value={form.waMessage}
+                    onChange={event => updateForm("waMessage", event.target.value)}
+                    className="input-field min-h-[88px]"
+                    placeholder="Halo, saya tertarik dengan produk [Product Name]. Apakah masih tersedia?"
+                  />
+                </Field>
+
+                <button
+                  type="submit"
+                  disabled={loading || uploadingProductImage}
+                  className="w-full h-12 rounded-2xl bg-primary text-white font-extrabold hover:bg-primaryDark active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Icon name={form.id ? "save" : "add"} />
+                  {form.id ? "Update Product" : "Add Product"}
+                </button>
+              </form>
+            </section>
+
+            <section className="lg:col-span-2 bg-white rounded-4xl border border-borderSoft shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-borderSoft flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-headline text-2xl font-extrabold">Product List</h2>
+                  <p className="text-sm text-textMuted">
+                    Manage products shown on the public landing page.
+                  </p>
+                </div>
+
+                <div className="relative w-full md:w-80">
+                  <input
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    className="w-full h-11 pl-4 pr-4 rounded-2xl border border-borderSoft bg-background focus:border-primary focus:ring-1 focus:ring-primary"
+                    placeholder="Search product..."
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="p-6">
+                  <ProductTableSkeleton />
+                </div>
+              ) : filteredProducts.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surfaceSoft text-textMuted">
+                      <tr>
+                        <th className="text-left px-6 py-4 font-extrabold">Product</th>
+                        <th className="text-left px-6 py-4 font-extrabold">Category</th>
+                        <th className="text-left px-6 py-4 font-extrabold">Price</th>
+                        <th className="text-left px-6 py-4 font-extrabold">Status</th>
+                        <th className="text-left px-6 py-4 font-extrabold">Active</th>
+                        <th className="text-right px-6 py-4 font-extrabold">Actions</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-borderSoft">
+                      {filteredProducts.map(product => (
+                        <tr key={product.id} className="hover:bg-surfaceSoft/60">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3 min-w-[260px]">
+                              <img
+                                src={product.imageUrl || fallbackImage}
+                                alt={product.name}
+                                className="w-12 h-12 rounded-2xl object-cover bg-surfaceSoft"
+                                onError={event => {
+                                  event.currentTarget.src = fallbackImage;
+                                }}
+                              />
+                              <div>
+                                <p className="font-extrabold line-clamp-1">{product.name}</p>
+                                <p className="text-xs text-textMuted line-clamp-1">{product.id}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-6 py-4">
+                            <span className="px-3 py-1 rounded-full bg-primarySoft text-primary font-bold text-xs">
+                              {product.category}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-4 font-bold">
+                            {formatCurrency(product.price)}
+                          </td>
+
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1 rounded-full font-bold text-xs ${
+                              product.stockStatus === "Out of Stock"
+                                ? "bg-red-100 text-red-700"
+                                : product.stockStatus === "Low Stock"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-green-100 text-green-700"
+                            }`}>
+                              {product.stockStatus}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1 rounded-full font-bold text-xs ${
+                              product.active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-slate-100 text-textMuted"
+                            }`}>
+                              {product.active ? "Visible" : "Hidden"}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => editProduct(product)}
+                                className="w-9 h-9 rounded-full bg-surfaceSoft text-primary hover:bg-primarySoft flex items-center justify-center"
+                                title="Edit"
+                              >
+                                <Icon name="edit" className="text-[18px]" />
+                              </button>
+
+                              <button
+                                onClick={() => onToggleProduct(product.id)}
+                                className="w-9 h-9 rounded-full bg-surfaceSoft text-textMuted hover:text-primary hover:bg-primarySoft flex items-center justify-center"
+                                title={product.active ? "Hide" : "Show"}
+                              >
+                                <Icon name={product.active ? "visibility_off" : "visibility"} className="text-[18px]" />
+                              </button>
+
+                              <button
+                                onClick={() => onDeleteProduct(product.id)}
+                                className="w-9 h-9 rounded-full bg-red-50 text-danger hover:bg-red-100 flex items-center justify-center"
+                                title="Delete"
+                              >
+                                <Icon name="delete" className="text-[18px]" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8">
+                  <EmptyState
+                    icon="inventory_2"
+                    title="No products yet"
+                    text="Add your first product using the form, or click Seed Sample."
+                  />
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      );
+    }
+
+    function SettingsPanel({ config, loading, adminUsername, onLogoUpload, onHeroImageUpload, onSaveSetting }) {
+      const [brandName, setBrandName] = useState(config.brandName || "");
+      const [whatsappNumber, setWhatsappNumber] = useState(config.whatsappNumber || "");
+      const [location, setLocation] = useState(config.location || "");
+      const [logoUrl, setLogoUrl] = useState(config.logoUrl || "");
+      const [heroImageUrl, setHeroImageUrl] = useState(config.heroImageUrl || fallbackImage);
+      const [uploadingLogo, setUploadingLogo] = useState(false);
+      const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
+
+      useEffect(() => {
+        setBrandName(config.brandName || "");
+        setWhatsappNumber(config.whatsappNumber || "");
+        setLocation(config.location || "");
+        setLogoUrl(config.logoUrl || "");
+        setHeroImageUrl(config.heroImageUrl || fallbackImage);
+      }, [config]);
+
+      async function handleLogoFileChange(event) {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = "";
+
+        if (!file) return;
+
+        setUploadingLogo(true);
+
+        try {
+          const result = await onLogoUpload(file);
+          const newLogoUrl = result.logoUrl || (result.config && result.config.logoUrl) || "";
+          setLogoUrl(newLogoUrl);
+        } finally {
+          setUploadingLogo(false);
+        }
+      }
+
+      async function handleHeroFileChange(event) {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = "";
+
+        if (!file) return;
+
+        setUploadingHeroImage(true);
+
+        try {
+          const result = await onHeroImageUpload(file);
+          const newHeroImageUrl = result.heroImageUrl || (result.config && result.config.heroImageUrl) || fallbackImage;
+          setHeroImageUrl(newHeroImageUrl);
+        } finally {
+          setUploadingHeroImage(false);
+        }
+      }
+
+      async function submitSettings(event) {
+        event.preventDefault();
+
+        await onSaveSetting("brandName", brandName);
+        await onSaveSetting("whatsappNumber", whatsappNumber);
+        await onSaveSetting("location", location);
+        await onSaveSetting("logoUrl", logoUrl);
+        await onSaveSetting("heroImageUrl", heroImageUrl);
+      }
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 md:px-10 py-8 md:py-12 space-y-8">
+          <div>
+            <div className="inline-flex items-center gap-2 bg-primarySoft text-primary px-4 py-2 rounded-full text-sm font-bold mb-4">
+              <Icon name="settings" className="text-[18px]" />
+              Settings
+            </div>
+
+            <h1 className="font-headline text-3xl md:text-5xl font-extrabold">
+              Brand and Upload Settings
+            </h1>
+
+            <p className="text-textMuted mt-2">
+              Upload your own logo and public hero image, save them to Google Drive, and reuse the Drive thumbnail URLs across the store and dashboard.
+            </p>
+
+            <p className="text-sm text-primary font-bold mt-2">
+              Logged in as: {adminUsername}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section className="lg:col-span-1 bg-white rounded-4xl border border-borderSoft shadow-sm p-6">
+              <h2 className="font-headline text-2xl font-extrabold">Logo Preview</h2>
+              <p className="text-sm text-textMuted mt-1">This logo appears in public and dashboard headers.</p>
+
+              <div className="mt-6 aspect-square rounded-4xl bg-surfaceSoft border border-borderSoft flex items-center justify-center overflow-hidden">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Current logo"
+                    className="w-full h-full object-cover"
+                    onError={event => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="text-center p-6">
+                    <div className="w-20 h-20 mx-auto rounded-3xl bg-primary text-white flex items-center justify-center shadow-green">
+                      <Icon name="storefront" className="text-[40px]" />
+                    </div>
+                    <p className="text-sm text-textMuted mt-4">No custom logo yet.</p>
+                  </div>
+                )}
+              </div>
+
+              <label className="mt-5 h-12 px-5 rounded-2xl bg-primary text-white hover:bg-primaryDark transition-all font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                <Icon name="upload" />
+                {uploadingLogo ? "Uploading..." : "Upload Logo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingLogo || loading}
+                  onChange={handleLogoFileChange}
+                />
+              </label>
+
+              <p className="text-xs text-textMuted mt-3">
+                Recommended: square PNG/JPG/WebP under 6 MB.
+              </p>
+            </section>
+
+            <section className="lg:col-span-2 bg-white rounded-4xl border border-borderSoft shadow-sm p-6">
+              <div className="flex flex-col md:flex-row md:items-start gap-6">
+                <div className="md:w-[42%]">
+                  <h2 className="font-headline text-2xl font-extrabold">Hero Image</h2>
+                  <p className="text-sm text-textMuted mt-1">
+                    This image appears on the right side of the public landing page hero section.
+                  </p>
+
+                  <label className="mt-5 h-12 px-5 rounded-2xl bg-primary text-white hover:bg-primaryDark transition-all font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                    <Icon name="upload" />
+                    {uploadingHeroImage ? "Uploading..." : "Upload Hero Image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingHeroImage || loading}
+                      onChange={handleHeroFileChange}
+                    />
+                  </label>
+
+                  <p className="text-xs text-textMuted mt-3">
+                    Recommended: landscape JPG/PNG/WebP, minimum 1200px wide, under 6 MB.
+                  </p>
+                </div>
+
+                <div className="flex-1">
+                  <div className="relative w-full aspect-[4/3] md:aspect-[16/10] rounded-4xl overflow-hidden shadow-green bg-surfaceSoft border border-borderSoft">
+                    <img
+                      src={heroImageUrl || fallbackImage}
+                      alt="Current hero image"
+                      className="w-full h-full object-cover"
+                      onError={event => {
+                        event.currentTarget.src = fallbackImage;
+                      }}
+                    />
+
+                    <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur rounded-3xl p-4 border border-white/70 shadow-soft">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center">
+                          <Icon name="image" className="text-[20px]" />
+                        </div>
+                        <div>
+                          <p className="font-extrabold">Public Hero Image</p>
+                          <p className="text-sm text-textMuted">Used on the main storefront page.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="lg:col-span-3 bg-white rounded-4xl border border-borderSoft shadow-sm p-6">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="font-headline text-2xl font-extrabold">Public Brand Settings</h2>
+                  <p className="text-sm text-textMuted">These values are stored in the Settings sheet.</p>
+                </div>
+              </div>
+
+              <form onSubmit={submitSettings} className="space-y-4">
+                <Field label="Brand Name">
+                  <input
+                    value={brandName}
+                    onChange={event => setBrandName(event.target.value)}
+                    className="input-field"
+                    placeholder="Managerku Store"
+                  />
+                </Field>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="WhatsApp Number">
+                    <input
+                      value={whatsappNumber}
+                      onChange={event => setWhatsappNumber(event.target.value)}
+                      className="input-field"
+                      placeholder="628..."
+                    />
+                  </Field>
+
+                  <Field label="Location">
+                    <input
+                      value={location}
+                      onChange={event => setLocation(event.target.value)}
+                      className="input-field"
+                      placeholder="Pontianak, Indonesia"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Logo URL">
+                  <input
+                    value={logoUrl}
+                    onChange={event => setLogoUrl(event.target.value)}
+                    className="input-field"
+                    placeholder="https://drive.google.com/thumbnail?id=..."
+                  />
+                </Field>
+
+                <Field label="Hero Image URL">
+                  <input
+                    value={heroImageUrl}
+                    onChange={event => setHeroImageUrl(event.target.value)}
+                    className="input-field"
+                    placeholder="https://drive.google.com/thumbnail?id=..."
+                  />
+                </Field>
+
+                <div className="rounded-3xl bg-surfaceSoft border border-borderSoft p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-primarySoft text-primary flex items-center justify-center">
+                      <Icon name="info" />
+                    </div>
+                    <div>
+                      <p className="font-extrabold">Upload behavior</p>
+                      <p className="text-sm text-textMuted mt-1">
+                        Uploaded logos, hero images, and product photos are saved in a Google Drive folder named "Managerku Store Uploads". The app stores the Drive thumbnail URL, so images can appear directly inside the web app.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || uploadingLogo || uploadingHeroImage}
+                  className="h-12 px-6 rounded-2xl bg-primary text-white font-extrabold hover:bg-primaryDark active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Icon name="save" />
+                  Save Settings
+                </button>
+              </form>
+            </section>
+          </div>
+        </div>
+      );
+    }
+
+    function Field({ label, required, children }) {
+      return (
+        <label className="block">
+          <span className="block text-sm font-extrabold mb-2">
+            {label} {required && <span className="text-danger">*</span>}
+          </span>
+          {children}
+        </label>
+      );
+    }
+
+    function SummaryCard({ icon, label, value }) {
+      return (
+        <div className="bg-white rounded-3xl border border-borderSoft shadow-sm p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-textMuted font-bold">{label}</p>
+              <p className="font-headline text-3xl font-extrabold mt-2">{value}</p>
+            </div>
+
+            <div className="w-12 h-12 rounded-2xl bg-primarySoft text-primary flex items-center justify-center">
+              <Icon name={icon} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function EmptyState({ icon, title, text }) {
+      return (
+        <div className="bg-white rounded-3xl border border-dashed border-borderSoft p-10 text-center">
+          <div className="w-16 h-16 mx-auto rounded-full bg-primarySoft text-primary flex items-center justify-center mb-4">
+            <Icon name={icon} />
+          </div>
+          <h3 className="font-headline text-xl font-extrabold">{title}</h3>
+          <p className="text-textMuted mt-2">{text}</p>
+        </div>
+      );
+    }
+
+    function ProductTableSkeleton() {
+      return (
+        <div className="space-y-3 animate-pulse">
+          {[1, 2, 3, 4, 5].map(item => (
+            <div key={item} className="h-16 bg-slate-100 rounded-2xl"></div>
+          ))}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
