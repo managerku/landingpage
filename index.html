@@ -245,7 +245,7 @@
      ************************************/
 
     function App() {
-      const [config, setConfig] = useState(fallbackConfig);
+      const [config, setConfig] = useState(null);
       const [products, setProducts] = useState([]);
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState("");
@@ -269,6 +269,8 @@
           setConfig(configResult.config || fallbackConfig);
           setProducts(Array.isArray(productsResult.products) ? productsResult.products : []);
         } catch (err) {
+          setConfig(null);
+          setProducts([]);
           setError(err.message || String(err));
         } finally {
           setLoading(false);
@@ -295,16 +297,32 @@
         });
       }, [products, search, category]);
 
+      if (loading) {
+        return <PageLoader />;
+      }
+
+      if (error) {
+        return (
+          <main className="min-h-screen bg-background flex items-center justify-center px-4">
+            <div className="w-full max-w-xl">
+              <ErrorBox message={error} onRetry={loadData} />
+            </div>
+          </main>
+        );
+      }
+
+      const safeConfig = config || fallbackConfig;
+
       const heroWaLink = buildWhatsAppLink(
-        config.whatsappNumber,
-        `Halo, saya ingin melihat katalog produk di ${config.brandName}.`
+        safeConfig.whatsappNumber,
+        `Halo, saya ingin melihat katalog produk di ${safeConfig.brandName}.`
       );
 
-      const heroImageUrl = String(config.heroImageUrl || fallbackImage).trim() || fallbackImage;
+      const heroImageUrl = String(safeConfig.heroImageUrl || fallbackImage).trim() || fallbackImage;
 
       return (
         <>
-          <Header config={config} />
+          <Header config={safeConfig} />
 
           <main>
             <section className="relative overflow-hidden bg-white py-12 md:py-24">
@@ -413,17 +431,13 @@
                   </div>
                 </div>
 
-                {error ? (
-                  <ErrorBox message={error} onRetry={loadData} />
-                ) : loading ? (
-                  <ProductSkeletonGrid />
-                ) : filteredProducts.length > 0 ? (
+                {filteredProducts.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {filteredProducts.map(product => (
                       <ProductCard
                         key={product.id}
                         product={product}
-                        whatsappNumber={config.whatsappNumber}
+                        whatsappNumber={safeConfig.whatsappNumber}
                       />
                     ))}
                   </div>
@@ -454,7 +468,7 @@
               </div>
             </section>
 
-            <Footer config={config} />
+            <Footer config={safeConfig} />
           </main>
         </>
       );
@@ -463,6 +477,22 @@
     /************************************
      * COMPONENTS
      ************************************/
+
+    function PageLoader() {
+      return (
+        <main className="min-h-screen bg-background flex items-center justify-center px-4">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto rounded-full border-4 border-primarySoft border-t-primary animate-spin"></div>
+            <p className="mt-5 font-headline text-xl font-extrabold text-primary">
+              Loading Managerku Store
+            </p>
+            <p className="mt-2 text-sm text-textMuted">
+              Preparing catalog...
+            </p>
+          </div>
+        </main>
+      );
+    }
 
     function ProductCard({ product, whatsappNumber }) {
       const message = product.waMessage || `Halo, saya tertarik dengan produk ${product.name}. Apakah masih tersedia?`;
@@ -551,29 +581,12 @@
 
     function ErrorBox({ message, onRetry }) {
       return (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-3xl p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-3xl p-6 shadow-soft">
           <p className="font-extrabold">Failed to connect to backend.</p>
           <p className="text-sm mt-2 break-words">{message}</p>
           <button onClick={onRetry} className="mt-4 h-10 px-4 rounded-full bg-red-600 text-white font-bold">
             Retry
           </button>
-        </div>
-      );
-    }
-
-    function ProductSkeletonGrid() {
-      return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map(item => (
-            <div key={item} className="bg-white rounded-3xl border border-borderSoft overflow-hidden animate-pulse">
-              <div className="aspect-square bg-slate-100"></div>
-              <div className="p-5 space-y-3">
-                <div className="h-5 bg-slate-100 rounded"></div>
-                <div className="h-4 bg-slate-100 rounded w-2/3"></div>
-                <div className="h-10 bg-slate-100 rounded-2xl"></div>
-              </div>
-            </div>
-          ))}
         </div>
       );
     }
